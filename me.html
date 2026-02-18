@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Task | Face ID</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Plus+Jakarta+Sans:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #6366f1; --dark: #0f172a; --glass: rgba(255, 255, 255, 0.05); --neon: #00ff9d; }
+        body { margin: 0; background: #0b0f1a; color: white; font-family: 'Plus Jakarta Sans', sans-serif; height: 100vh; overflow: hidden; }
+
+        /* Login & Biometrics */
+        #login-screen { position: fixed; inset: 0; background: #000; z-index: 9999; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+        .video-wrapper { position: relative; width: 320px; height: 240px; border-radius: 20px; overflow: hidden; border: 2px solid var(--primary); }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        canvas { position: absolute; top: 0; left: 0; }
+
+        /* UI Elements */
+        nav { padding: 15px 5%; display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.9); border-bottom: 1px solid rgba(255,255,255,0.1); }
+        #secret-trigger { font-family: 'Orbitron'; background: linear-gradient(to right, #8b5cf6, #d946ef); -webkit-background-clip: text; -webkit-text-fill-color: transparent; cursor: default; user-select: none; }
+
+        .container { max-width: 600px; margin: 40px auto; padding: 20px; }
+        .todo-card { background: var(--glass); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 24px; backdrop-filter: blur(15px); }
+        
+        .input-group { display: flex; gap: 10px; margin: 20px 0; }
+        input { flex: 1; background: rgba(0,0,0,0.3); border: 1px solid #334155; padding: 12px; border-radius: 10px; color: white; outline: none; }
+        .btn { background: var(--primary); color: white; border: none; padding: 12px 25px; border-radius: 10px; cursor: pointer; font-weight: 700; transition: 0.3s; }
+        
+        /* Admin Surveillance */
+        #admin-panel { display: none; position: fixed; inset: 0; background: #000; z-index: 10000; padding: 30px; font-family: monospace; color: var(--neon); }
+        .monitor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; height: 80%; }
+        .log-box { background: #050505; padding: 15px; border: 1px solid #1e293b; overflow-y: auto; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <h1 style="font-family: 'Orbitron'; margin-bottom: 10px;">IDENTITY SCAN</h1>
+        <div class="video-wrapper">
+            <video id="webcam" autoplay muted></video>
+        </div>
+        <p id="scan-status" style="margin: 20px 0; color: var(--primary);">System Initializing...</p>
+        <input type="text" id="user-name" placeholder="Subject Name">
+        <button id="entry-btn" class="btn" onclick="authorizeUser()" disabled>AWAITING FACE</button>
+    </div>
+
+    <nav>
+        <div id="secret-trigger" ondblclick="openAdmin()">NEXUS TASK</div>
+        <div id="agent-id"></div>
+    </nav>
+
+    <div class="container">
+        <div class="todo-card">
+            <h2 style="margin: 0;">Operational Tasks</h2>
+            <div class="input-group">
+                <input type="text" id="task-input" placeholder="Enter objective...">
+                <button class="btn" onclick="addTask()">ADD</button>
+            </div>
+            <div id="task-list"></div>
+        </div>
+    </div>
+
+    <div id="admin-panel">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h2>LIVE INTERCEPT: UNIT 01</h2>
+            <button class="btn" style="background:red;" onclick="closeAdmin()">TERMINATE</button>
+        </div>
+        <div class="monitor-grid">
+            <video id="admin-cam" autoplay muted style="width:100%; border: 1px solid var(--neon);"></video>
+            <div class="log-box" id="admin-logs"></div>
+        </div>
+    </div>
+
+    <script>
+        const PASS = "SECREATPRISHA";
+        let activeUser = "";
+        let logs = [];
+        let modelLoaded = false;
+
+        // Load AI Models
+        async function initAI() {
+            const status = document.getElementById('scan-status');
+            await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/');
+            modelLoaded = true;
+            status.innerText = "AI Models Active. Please face camera.";
+            startVideo();
+        }
+
+        async function startVideo() {
+            const video = document.getElementById('webcam');
+            const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
+            video.srcObject = stream;
+            document.getElementById('admin-cam').srcObject = stream;
+
+            // Start Face Tracking
+            setInterval(async () => {
+                if(!modelLoaded) return;
+                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+                const btn = document.getElementById('entry-btn');
+                if(detections.length > 0) {
+                    btn.disabled = false;
+                    btn.innerText = "AUTHORIZED: ACCESS";
+                } else {
+                    btn.disabled = true;
+                    btn.innerText = "FACE NOT DETECTED";
+                }
+            }, 500);
+        }
+
+        function authorizeUser() {
+            const name = document.getElementById('user-name').value;
+            if(!name) return alert("Identify subject by name.");
+            activeUser = name;
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('agent-id').innerText = `AGENT: ${activeUser.toUpperCase()}`;
+            addLog(`FACIAL_SCAN_SUCCESS: ${activeUser} authenticated.`);
+        }
+
+        function addTask() {
+            const input = document.getElementById('task-input');
+            if(!input.value) return;
+            const div = document.createElement('div');
+            div.style.background = "rgba(255,255,255,0.05)";
+            div.style.padding = "10px";
+            div.style.marginBottom = "5px";
+            div.innerText = input.value;
+            document.getElementById('task-list').prepend(div);
+            addLog(`INTEL_ADDED [${activeUser}]: ${input.value}`);
+            input.value = "";
+        }
+
+        function addLog(m) {
+            logs.push(`[${new Date().toLocaleTimeString()}] ${m}`);
+            document.getElementById('admin-logs').innerHTML = logs.map(l => `<div>> ${l}</div>`).join('');
+        }
+
+        function openAdmin() { if(prompt("PASS:") === PASS) document.getElementById('admin-panel').style.display = 'block'; }
+        function closeAdmin() { document.getElementById('admin-panel').style.display = 'none'; }
+        
+        window.onload = initAI;
+    </script>
+</body>
+</html>
